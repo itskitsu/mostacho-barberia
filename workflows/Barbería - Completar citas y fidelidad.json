@@ -1,0 +1,141 @@
+{
+  "name": "Barbería - Completar citas y fidelidad",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "578a532e-25d7-4d18-a414-2ce444ae745f",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, telefono, es_gratis\nFROM citas\nWHERE estado = 'agendada'\n  AND fecha_hora_fin < (NOW() AT TIME ZONE 'America/Bogota');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        192,
+        0
+      ],
+      "id": "6198b57a-be21-41e7-8870-e07e0c5f0f53",
+      "name": "Buscar citas vencidas",
+      "credentials": {
+        "postgres": {
+          "id": "72D7LnSS1NmY7pp8",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE citas\nSET estado = 'completada'\nWHERE id = $1\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ $json.id }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        384,
+        0
+      ],
+      "id": "87ad8bc5-b78a-4d3e-bf14-4f9c6c36a8bf",
+      "name": "Marcar cita completada",
+      "credentials": {
+        "postgres": {
+          "id": "72D7LnSS1NmY7pp8",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE clientes\nSET\n  contador_visitas = CASE\n    WHEN $2 = true THEN 0\n    WHEN contador_visitas + 1 >= 6 THEN 0\n    ELSE contador_visitas + 1\n  END,\n  servicio_gratis_disponible = CASE\n    WHEN $2 = true THEN false\n    WHEN contador_visitas + 1 >= 6 THEN true\n    ELSE servicio_gratis_disponible\n  END,\n  fecha_actualizacion = NOW()\nWHERE telefono = $1\nRETURNING *;",
+        "options": {
+          "queryReplacement": "={{ $json.telefono }}, {{ $json.es_gratis }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        544,
+        0
+      ],
+      "id": "19b5acc5-520b-4144-a599-7dab976e70e9",
+      "name": "Actualizar fidelidad del cliente",
+      "credentials": {
+        "postgres": {
+          "id": "72D7LnSS1NmY7pp8",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Buscar citas vencidas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar citas vencidas": {
+      "main": [
+        [
+          {
+            "node": "Marcar cita completada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar cita completada": {
+      "main": [
+        [
+          {
+            "node": "Actualizar fidelidad del cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "626d32a5-e33d-429b-83b3-e064ff399162",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "57937c6e4396eb623293d82938f5abebe4910cbe1f85f659de05c396cd357d52"
+  },
+  "nodeGroups": [],
+  "id": "URTJjGyqCCOIfh81",
+  "tags": []
+}

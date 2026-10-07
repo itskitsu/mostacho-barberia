@@ -1,0 +1,155 @@
+{
+  "name": "Barbería - Consultar Disponibilidad",
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "93db107c-c6b8-4870-9eec-11828a1e8381",
+              "name": "After",
+              "value": "={{ $json.fecha_consulta }}T00:00:00-05:00",
+              "type": "string"
+            },
+            {
+              "id": "80001ea0-b6df-463d-b70a-c7feff4a1bce",
+              "name": "Before",
+              "value": "={{ $json.fecha_consulta }}T23:59:59-05:00",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        352,
+        -192
+      ],
+      "id": "011fa202-aa1c-4f02-bb43-ac21b633dade",
+      "name": "Edit Fields",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "terangi8n8@gmail.com",
+          "mode": "list",
+          "cachedResultName": "terangi8n8@gmail.com"
+        },
+        "timeMin": "={{ $json.After }}",
+        "timeMax": "={{ $json.Before }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        576,
+        -192
+      ],
+      "id": "8dbe7711-d281-4557-b707-4bf911be5273",
+      "name": "Get many events",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "DB7KwZ7hj0Tc3Vvr",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "fecha_consulta"
+            },
+            {
+              "name": "hora_inicio"
+            },
+            {
+              "name": "duracion_min",
+              "type": "number"
+            },
+            {
+              "name": "barbero_preferido"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        144,
+        -192
+      ],
+      "id": "21afa232-3013-4190-ab36-c75c9a7f4508",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const BARBEROS = ['Joniel', 'Rubén', 'Styven', 'Sergio'];\nconst APERTURA = 9 * 60, CIERRE = 19 * 60;\n\nconst t = $('When Executed by Another Workflow').first().json;\nconst fecha = t.fecha_consulta;\nconst dur = Number(t.duracion_min);\nconst [hh, mm] = String(t.hora_inicio).split(':').map(Number);\nconst ini = hh * 60 + mm, fin = ini + dur;\nconst preferido = String(t.barbero_preferido || '').trim();\n\nconst dow = new Date(`${fecha}T12:00:00-05:00`).getUTCDay(); // 0 = domingo\nif (dow === 0) {\n  return [{ json: { disponible: false, motivo: 'Domingo: la barbería está cerrada', alternativas: [] } }];\n}\nif (ini < APERTURA || fin > CIERRE) {\n  return [{ json: { disponible: false, motivo: 'Fuera del horario de atención (lunes a sábado, 9:00 a.m. a 7:00 p.m.)', alternativas: [] } }];\n}\n\n// Minutos del día en hora de Colombia (UTC-5)\nconst aMin = iso => {\n  const d = new Date(new Date(iso).getTime() - 5 * 3600000);\n  return d.getUTCHours() * 60 + d.getUTCMinutes();\n};\n\nconst ocupados = Object.fromEntries(BARBEROS.map(b => [b, []]));\nconst sinAsignar = [];\nfor (const item of $input.all()) {\n  const e = item.json;\n  if (!e.start || !e.start.dateTime) continue;\n  const iv = [aMin(e.start.dateTime), aMin(e.end.dateTime)];\n  const m = String(e.summary || '').match(/\\(([^)]+)\\)\\s*$/);\n  const b = m ? m[1].trim() : null;\n  if (b && ocupados[b]) ocupados[b].push(iv); else sinAsignar.push(iv);\n}\n\nconst solapa = (iv, a, b) => iv[0] < b && iv[1] > a;\nconst libres = (a, b) => {\n  const l = BARBEROS.filter(x => !ocupados[x].some(iv => solapa(iv, a, b)));\n  const n = sinAsignar.filter(iv => solapa(iv, a, b)).length;\n  return l.slice(0, Math.max(0, l.length - n));\n};\nconst hora = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;\n\nconst libresAhora = libres(ini, fin);\nconst elegido = preferido\n  ? libresAhora.find(x => x.toLowerCase() === preferido.toLowerCase())\n  : libresAhora[0];\n\nif (elegido) {\n  return [{ json: { disponible: true, barbero_asignado: elegido, barberos_libres: libresAhora, hora_inicio: hora(ini), hora_fin: hora(fin), alternativas: [] } }];\n}\n\nconst alternativas = [];\nfor (let s = APERTURA; s + dur <= CIERRE; s += 30) {\n  const l = libres(s, s + dur);\n  const ok = preferido ? l.some(x => x.toLowerCase() === preferido.toLowerCase()) : l.length > 0;\n  if (ok) alternativas.push({ hora: hora(s), diff: Math.abs(s - ini) });\n}\nalternativas.sort((a, b) => a.diff - b.diff);\n\nreturn [{ json: {\n  disponible: false,\n  motivo: preferido && libresAhora.length ? `${preferido} no está disponible a esa hora` : 'No hay barberos libres a esa hora',\n  alternativas: alternativas.slice(0, 3).map(a => a.hora)\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -192
+      ],
+      "id": "71e59ad7-d5a9-4486-8fe6-5ff61cffb325",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get many events": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Get many events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "9ca88480-fcca-4dc0-84a4-f066d6e0437a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "57937c6e4396eb623293d82938f5abebe4910cbe1f85f659de05c396cd357d52"
+  },
+  "nodeGroups": [],
+  "id": "BFwJVQPnBVz3URr8",
+  "tags": []
+}
