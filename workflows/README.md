@@ -1,7 +1,4 @@
 # Workflows de n8n
-
-Aquí van los flujos exportados desde n8n (un `.json` por flujo):
-
 | Archivo | Flujo |
 |---|---|
 | `agente-principal.json` | Agente principal (WhatsApp) — "Portafolio - Agente Barbería" |
@@ -16,12 +13,6 @@ Aquí van los flujos exportados desde n8n (un `.json` por flujo):
 1. Abre el flujo en n8n.
 2. Menú **⋯** (arriba a la derecha) → **Download**.
 3. Renombra el archivo y guárdalo en esta carpeta.
-
-## Antes de subirlos a GitHub
-
-- Los `.json` **no** guardan el contenido de las credenciales (solo su nombre e id), pero revísalos igualmente: busca con el buscador de tu editor `token`, `apiKey`, `password`, el Access Token de WhatsApp y el Business Account ID reales.
-- Reemplaza cualquier **número de teléfono real de clientes de prueba** que haya quedado pineado en algún nodo por un marcador como `TU_NUMERO_DE_PRUEBA`.
-- Si algún nodo tiene datos de clientes reales (nombre, teléfono, cédula) guardados como datos fijos/pinned, quítalos.
 
 ## Cómo importarlos
 
